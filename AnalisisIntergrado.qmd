@@ -1,0 +1,815 @@
+---
+title: "Analisis Integrado"
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    page-layout: full
+editor: visual
+execute:
+  cache: true
+  warning: false
+---
+
+```{r}
+setwd("/storage2/RNASeq/integrado/")
+library(tidyverse)
+library(lubridate)
+library(ggrepel)
+library(ggsci)
+library(ggpubr)
+library(rstatix)
+```
+
+# Load data
+
+## Funtional Annotation
+
+```{r}
+mart <- biomaRt::useMart(biomart = "ENSEMBL_MART_ENSEMBL",
+                dataset = "hsapiens_gene_ensembl",
+                host = 'https://www.ensembl.org')
+
+ttg <- biomaRt::getBM(
+  attributes = c("ensembl_gene_id", "external_gene_name", "description","entrezgene_id"),
+  mart = mart)
+```
+
+## Metadata
+
+```{r}
+
+metadata <- readxl::read_excel("2023_02_04_BD_PROANG_Enviada_TAG.xlsx")
+
+
+
+metadata2 <- metadata %>%
+  rowwise() %>% 
+            mutate(so_iniciottodt = as_date(so_iniciottodt)) %>% 
+            mutate(so_finttodt = as_date(so_finttodt)) %>%
+            mutate(SLP = so_finttodt - so_iniciottodt) %>% 
+            mutate(so_exitusdt = as_date(so_exitusdt)) %>% 
+            mutate(SG = so_exitusdt - so_iniciottodt) %>% 
+  mutate(SG_score = case_when(as.numeric(SG)/30 <= 6 ~ "Bajo",
+                              as.numeric(SG)/30 > 6 & as.numeric(SG)/30 <= 26 ~ "Medio",
+                              as.numeric(SG)/30 > 26 ~ "Alto") %>% as_factor()) %>% 
+  mutate(SLP_score = case_when(as.numeric(SLP)/30 <= 3 ~ "Refractario",
+                              as.numeric(SLP)/30 > 3 & as.numeric(SLP)/30 <= 24 ~ "Largo",
+                              as.numeric(SLP)/30 > 24 ~ "MuyLargo") %>% as_factor()) %>% 
+  dplyr::rename(Respuesta = `Mejor respuesta al tratamiento`) %>% 
+  mutate(Resp = case_when(Respuesta == "RP" ~ "RP",
+                          Respuesta == "EE" ~ "RP",
+                          Respuesta == "NE" ~ "NE",
+                          Respuesta == "PE" ~ "PE") %>% as_factor()) %>% 
+  mutate(Respuesta = as_factor(Respuesta)) %>% 
+  mutate(edad = (`Fecha diagnóstico` %>% as_date() %>% year())- so_nacimentodt) %>% 
+  dplyr::select(Paciente,SLP_score,SG_score,motzer = `cmotzer 3 categorías`,heng = `cheng 3 categorías`,Respuesta,Resp,Sexo,edad,estadio = `Estadío tumor al diagnóstico IV`) %>% 
+  separate(Paciente,c("Centro","Pat"), sep = "-",remove = F) %>% 
+  mutate(Centro = as.numeric(Centro)) %>% 
+  mutate(Pat = as.numeric(Pat)) %>% 
+  unite(ID,c(Centro,Pat),sep = "-")
+  
+```
+
+## RNA-Seq
+
+```{r}
+count_table <- read_tsv("salmon.merged.gene_counts.tsv")
+
+colnames(count_table) <- gsub("X","",colnames(count_table)) %>% gsub("\\.","-",.)
+
+
+count_long <- count_table %>% 
+  pivot_longer(names_to = "Sample", values_to = "counts", c(-gene_id,-gene_name)) %>% 
+  group_by(Sample) %>% 
+  mutate(TotalCounts = sum(counts))
+
+count_long %>%  
+  dplyr::select(Sample, TotalCounts) %>% 
+  distinct() %>% 
+  ggplot(aes(x = TotalCounts)) + geom_histogram()
+
+count_trim <- count_long %>% 
+  ungroup() %>% 
+  group_by(gene_id,Sample) %>% 
+  summarise(counts = sum(counts)) %>% 
+  ungroup() %>% 
+  group_by(gene_id) %>% 
+  mutate(TotalGene = sum(counts)) %>% 
+  filter(TotalGene > 30) %>% 
+  ungroup() %>% 
+  group_by(gene_id) %>% 
+  mutate(TotalZeros = sum(counts==0)) %>% 
+  filter(TotalZeros < 20) %>% 
+  mutate(Sample = str_remove(Sample,"_.*")) %>% 
+  ungroup() %>% 
+  separate(Sample,c("num1","num2","num3"),sep = "-", remove = F) %>% 
+  mutate(num1 = as.numeric(num1)) %>% 
+  mutate(num2 = as.numeric(num2)) %>% 
+  unite(ID,num1:num2,sep = "-") %>% 
+  select(-num3) %>% 
+  semi_join(metadata2)
+  
+count_trim %>% 
+  mutate(counts = counts+1) %>% 
+  ggplot(aes(x=Sample, y = counts)) + geom_boxplot() + coord_flip() + scale_y_log10()
+
+
+```
+
+## DNA
+
+```{r message=FALSE}
+files <- dir(pattern = "_genes.txt")
+
+stats <- read_table("stats.txt") %>% mutate(sample = gsub(".R1.fq.gz","",file))
+
+res <- data.frame()
+for (i in files)
+{
+  tmp <- read_tsv(i,comment = "# ")
+  tmp$sample = i
+  res <- bind_rows(res,tmp)
+  
+}
+
+
+BED <- read_tsv("IAA14187_167_Designed.bed", skip = 1,col_names = F)
+
+colnames(BED) <- c("Chrm","Start","End","ID","comment","Ann")
+
+BED <- BED %>% 
+  separate(Ann,c("GeneId","Pool"), sep = ";") %>% 
+  mutate(GeneId = str_replace(GeneId,"GENE_ID=","")) %>% 
+  select(GeneId) %>% 
+  distinct()
+
+```
+
+```{r}
+DNA_table <- res %>% 
+  group_by(GeneId,sample) %>% 
+  summarise(High = sum(variants_impact_HIGH),Moderate = sum(variants_impact_MODERATE), Low = sum(variants_impact_LOW)) %>% 
+  pivot_longer(names_to = "impact", values_to = "N", High:Low) %>% 
+  #unite(Var, c(GeneId,impact)) %>% 
+  #pivot_wider(names_from = Var, values_from = N, values_fill = 0) %>% 
+  mutate(sample = str_remove(sample,"_S\\d+.bwa.mutect2.filter_genes.txt")) %>% 
+  filter(!grepl("snpEff",sample)) %>% 
+  separate(sample,c("num1","num2","num3"), sep ="_",remove = F) %>% 
+  mutate(num1 = as.numeric(num1)) %>% 
+  mutate(num2 = as.numeric(num2)) %>% 
+  unite(ID,num1:num2, sep = "-") %>% 
+  select(-num3) %>% semi_join(metadata2)
+
+```
+
+# Analisis
+
+## RNA-Seq
+
+```{r}
+library(DESeq2)
+```
+
+Setting count matrix for DE analysis
+
+### Heng
+
+```{r}
+
+table_trim_heng <- count_trim %>% 
+  inner_join(metadata2 %>% dplyr::select(ID,heng)) %>% 
+  drop_na() %>% 
+  dplyr::select(gene_id,Sample, counts) %>% 
+  pivot_wider(names_from = Sample, values_from = counts) %>% 
+  as_data_frame() %>% 
+  column_to_rownames("gene_id") %>% 
+  as.matrix() 
+
+meta_heng <- count_trim %>% select(Sample,ID) %>% distinct() %>% 
+  inner_join(metadata2 %>% 
+               dplyr::select(ID,heng)) %>% 
+  drop_na() %>% 
+  column_to_rownames("Sample")
+
+dds_gene_heng <- DESeqDataSetFromMatrix(countData = round(table_trim_heng), 
+                                   colData = meta_heng, 
+                                   design = ~ heng)
+dds_gene_heng <- DESeq(dds_gene_heng)
+
+```
+
+#### Favorable vs Intermedio
+
+```{r}
+
+Heng_favorable_intermedio <- results(dds_gene_heng, contrast = c("heng","FAVORABLE","INTERMEDIO")) %>% as_tibble(rownames = "ensembl_gene_id")
+
+Heng_favorable_intermedio <- Heng_favorable_intermedio %>% 
+  dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+Heng_favorable_intermedio %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "Heng_favorable_intermedio")
+
+Heng_favorable_intermedio %>% filter(fdr < 0.05) %>% DT::datatable()
+
+```
+
+#### Favorable vs Intermedio
+
+```{r}
+Heng_favorable_malo <- results(dds_gene_heng, contrast = c("heng","FAVORABLE","MALO")) %>% as_tibble(rownames = "ensembl_gene_id")
+
+Heng_favorable_malo <- Heng_favorable_malo %>% 
+  dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+Heng_favorable_malo %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "Heng_favorable_malo")
+
+Heng_favorable_malo %>% filter(fdr < 0.05) %>% DT::datatable()
+
+```
+
+#### Favorable vs Intermedio
+
+```{r}
+Heng_intermedio_malo <- results(dds_gene_heng, contrast = c("heng","INTERMEDIO","MALO")) %>% as_tibble(rownames = "ensembl_gene_id")
+
+Heng_intermedio_malo <- Heng_intermedio_malo %>% 
+  dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+Heng_intermedio_malo %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "Heng_favorable_malo")
+
+Heng_intermedio_malo %>% filter(fdr < 0.05)%>% DT::datatable()
+
+```
+
+### SG
+
+```{r}
+
+table_trim_SG_SLP_Resp <- count_trim %>% 
+  inner_join(metadata2 %>% 
+               dplyr::select(ID,Paciente,SG_score, SLP_score, Resp)) %>% 
+  drop_na() %>% 
+  dplyr::select(gene_id,Sample, counts) %>% 
+  pivot_wider(names_from = Sample, values_from = counts) %>% 
+  as_data_frame() %>% 
+  column_to_rownames("gene_id") %>% 
+  as.matrix() 
+
+meta_SG_SLP_Resp <- count_trim %>% select(Sample,ID) %>% distinct() %>% 
+  inner_join(metadata2 %>% 
+               dplyr::select(ID,SG_score,SLP_score,Resp)) %>% 
+  drop_na() %>% 
+  column_to_rownames("Sample")
+
+dds_gene_SG_SLP_Resp <- DESeqDataSetFromMatrix(countData = round(table_trim_SG_SLP_Resp), 
+                                   colData = meta_SG_SLP_Resp, 
+                                   design = ~ SG_score + SLP_score + Resp)
+dds_gene_SG_SLP_Resp <- DESeq(dds_gene_SG_SLP_Resp)
+
+```
+
+#### Bajo vs Medio
+
+```{r}
+
+SG_bajo_medio <- results(dds_gene_SG_SLP_Resp, contrast = c("SG_score","Bajo","Medio"))
+
+SG_bajo_medio <- SG_bajo_medio %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+SG_bajo_medio %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "SG_bajo_medio")
+
+
+
+SG_bajo_medio %>% filter(fdr < 0.05)%>% DT::datatable()
+```
+
+#### Bajo vs Alto
+
+```{r}
+
+SG_bajo_alto <- results(dds_gene_SG_SLP_Resp, contrast = c("SG_score","Bajo","Alto"))
+
+SG_bajo_alto <- SG_bajo_alto %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+SG_bajo_alto %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "SG_bajo_alto")
+
+
+SG_bajo_alto %>% filter(fdr < 0.05)%>% DT::datatable()
+```
+
+#### Medio vs Alto
+
+```{r}
+
+SG_medio_alto <- results(dds_gene_SG_SLP_Resp, contrast = c("SG_score","Medio","Alto"))
+
+SG_medio_alto <- SG_medio_alto %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+SG_medio_alto %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "SG_medio_alto")
+
+
+SG_medio_alto %>% filter(fdr < 0.05)%>% DT::datatable()
+```
+
+### SLP
+
+#### Refractario vs Largo
+
+```{r}
+
+SLP_refractario_largo <- results(dds_gene_SG_SLP_Resp, contrast = c("SLP_score","Refractario","Largo"))
+
+SLP_refractario_largo <- SLP_refractario_largo %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+SLP_refractario_largo %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "SLP_refractario_largo")
+
+SLP_refractario_largo %>% filter(fdr < 0.05)%>% DT::datatable()
+
+```
+
+#### Refractario vs MuyLargo
+
+```{r}
+
+SLP_refractario_muyLargo <- results(dds_gene_SG_SLP_Resp, contrast = c("SLP_score","Refractario","MuyLargo"))
+
+SLP_refractario_muyLargo <- SLP_refractario_muyLargo %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+SLP_refractario_muyLargo %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "SLP_refractario_muyLargo")
+
+SLP_refractario_muyLargo %>% filter(fdr < 0.05)%>% DT::datatable()
+```
+
+#### Largo vs MuyLargo
+
+```{r}
+
+SLP_largo_muyLargo <- results(dds_gene_SG_SLP_Resp, contrast = c("SLP_score","Largo","MuyLargo"))
+
+SLP_largo_muyLargo <- SLP_largo_muyLargo %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+SLP_largo_muyLargo %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "SLP_largo_muyLargo")
+
+
+SLP_largo_muyLargo %>% filter(fdr < 0.05)%>% DT::datatable()
+```
+
+### Respuesta Parcial vs Progresion de la Enfermedad
+
+#### RP vs PE
+
+```{r}
+
+Resp_RP_PE <- results(dds_gene_SG_SLP_Resp, contrast = c("Resp","RP","PE"))
+
+Resp_RP_PE <- Resp_RP_PE %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+Resp_RP_PE %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "Resp_RP_PE")
+
+Resp_RP_PE %>% filter(fdr < 0.05)%>% DT::datatable()
+```
+
+## DNA-Seq
+
+```{r}
+library(modelbased)
+DNA_test <- DNA_table %>% 
+  semi_join(BED) %>% 
+  group_by(GeneId,sample,ID) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  ungroup() %>% 
+  inner_join(metadata2) %>% 
+  mutate_at(vars(SLP_score:Sexo,estadio),as_factor) %>% 
+  nest_by(GeneId) %>% 
+  mutate(test = list(glm(Mutations ~ SLP_score + SG_score + Resp + heng, data = data, family = poisson)))
+
+```
+
+### Heng
+
+```{r}
+DNA_test %>% 
+  mutate(res = list(estimate_contrasts(test,contrast = "heng"))) %>% 
+  unnest(res) %>% 
+  select(-test,-data) %>% 
+  mutate(padj = p.adjust(p, method = "fdr")) %>% 
+  filter(padj < 0.05) %>% DT::datatable()
+```
+
+```{r fig.height=15, fig.width= 15}
+test_heng <- DNA_test %>% 
+  mutate(res = list(estimate_contrasts(test,contrast = "heng"))) %>% 
+  unnest(res) %>% 
+  select(-test,-data) %>% 
+  mutate(p.adj = p.adjust(p, method = "fdr")) %>% 
+  filter(p.adj < 0.05) %>% 
+  inner_join(DNA_table %>% 
+               ungroup() %>%
+               summarise(Mutations = sum(N), .by = c(GeneId,sample)) %>% 
+               summarise(y.position = max(Mutations),.by = GeneId)) %>% 
+  mutate(Level1_n = case_when( Level1 == "FAVORABLE" ~ 1,
+                               Level1 == "INTERMEDIO" ~ 2,
+                               Level1 == "MALO" ~ 3)) %>% 
+  mutate(Level2_n = case_when( Level2 == "FAVORABLE" ~ 1,
+                               Level2 == "INTERMEDIO" ~ 2,
+                               Level2 == "MALO" ~ 3)) %>% 
+  rowwise() %>% 
+  mutate(xmax = max(Level1_n,Level2_n)) %>% 
+  mutate(xmin = min(Level1_n,Level2_n)) %>% 
+  add_significance() %>% 
+  mutate(group1 = Level1, group2 = Level2) %>% 
+  ungroup() %>% 
+  group_by(GeneId) %>% 
+  mutate(offset = row_number() * y.position/10) %>% 
+  ungroup() %>% 
+  mutate(y.position = y.position + offset)
+  
+DNA_table %>% 
+  semi_join(BED) %>% 
+  semi_join(test_heng %>% dplyr::select(GeneId) %>% distinct()) %>% 
+  group_by(GeneId,sample,ID) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  ungroup() %>% 
+  inner_join(metadata2) %>% 
+  mutate_at(vars(SLP_score:Sexo,estadio),as_factor) %>% 
+  drop_na(heng) %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = heng, y = Mutations, fill = heng)) + 
+  geom_errorbarh(data = test_heng, aes(xmin = xmin, xmax = xmax, y = y.position, height = y.position/10)) +
+  facet_wrap(~ GeneId, scales = "free") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+### SG
+
+```{r}
+DNA_test %>% 
+  mutate(res = list(estimate_contrasts(test,contrast = "SG_score"))) %>% 
+  unnest(res) %>% 
+  select(-test,-data) %>% 
+  mutate(padj = p.adjust(p, method = "fdr")) %>% 
+  filter(padj < 0.05)%>% DT::datatable()
+```
+
+```{r fig.width= 15, fig.height= 15}
+test_SG <- DNA_test %>% 
+  mutate(res = list(estimate_contrasts(test,contrast = "SG_score"))) %>% 
+  unnest(res) %>% 
+  select(-test,-data) %>% 
+  mutate(p.adj = p.adjust(p, method = "fdr")) %>% 
+  filter(p.adj < 0.05) %>% 
+  inner_join(DNA_table %>% 
+               ungroup() %>%
+               summarise(Mutations = sum(N), .by = c(GeneId,sample)) %>% 
+               summarise(y.position = max(Mutations),.by = GeneId)) %>% 
+  mutate(Level1_n = case_when( Level1 == "Bajo" ~ 1,
+                               Level1 == "Medio" ~ 2,
+                               Level1 == "Alto" ~ 3)) %>% 
+  mutate(Level2_n = case_when( Level2 == "Bajo" ~ 1,
+                               Level2 == "Medio" ~ 2,
+                               Level2 == "Alto" ~ 3)) %>% 
+  rowwise() %>% 
+  mutate(xmax = max(Level1_n,Level2_n)) %>% 
+  mutate(xmin = min(Level1_n,Level2_n)) %>% 
+  add_significance() %>% 
+  mutate(group1 = Level1, group2 = Level2) %>% 
+  ungroup() %>% 
+  group_by(GeneId) %>% 
+  mutate(offset = row_number() * y.position/10) %>% 
+  ungroup() %>% 
+  mutate(y.position = y.position + offset)
+  
+DNA_table %>% 
+  semi_join(BED) %>% 
+  semi_join(test_SG %>% dplyr::select(GeneId) %>% distinct()) %>% 
+  group_by(GeneId,sample,ID) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  ungroup() %>% 
+  inner_join(metadata2) %>% 
+  mutate_at(vars(SLP_score:Sexo,estadio),as_factor) %>% 
+  drop_na(SLP_score) %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = SG_score, y = Mutations, fill = SG_score)) + 
+  geom_errorbarh(data = test_SG, aes(xmin = xmin, xmax = xmax, y = y.position, height = y.position/10)) +
+  facet_wrap(~ GeneId, scales = "free") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+### SLP
+
+```{r}
+DNA_test %>% 
+  mutate(res = list(estimate_contrasts(test,contrast = "SLP_score"))) %>% 
+  unnest(res) %>% 
+  select(-test,-data) %>% 
+  mutate(padj = p.adjust(p, method = "fdr")) %>% 
+  filter(padj < 0.05)%>% DT::datatable()
+```
+
+```{r fig.width= 15, fig.height= 15}
+test_SLP <- DNA_test %>% 
+  mutate(res = list(estimate_contrasts(test,contrast = "SLP_score"))) %>% 
+  unnest(res) %>% 
+  select(-test,-data) %>% 
+  mutate(p.adj = p.adjust(p, method = "fdr")) %>% 
+  filter(p.adj < 0.05) %>% 
+  inner_join(DNA_table %>% 
+               ungroup() %>%
+               summarise(Mutations = sum(N), .by = c(GeneId,sample)) %>% 
+               summarise(y.position = max(Mutations),.by = GeneId)) %>% 
+  mutate(Level1_n = case_when( Level1 == "Refractario" ~ 1,
+                               Level1 == "Largo" ~ 2,
+                               Level1 == "Muy Largo" ~ 3)) %>% 
+  mutate(Level2_n = case_when( Level2 == "Refractario" ~ 1,
+                               Level2 == "Largo" ~ 2,
+                               Level2 == "Muy Largo" ~ 3)) %>% 
+  rowwise() %>% 
+  mutate(xmax = max(Level1_n,Level2_n)) %>% 
+  mutate(xmin = min(Level1_n,Level2_n)) %>% 
+  add_significance() %>% 
+  mutate(group1 = Level1, group2 = Level2) %>% 
+  ungroup() %>% 
+  group_by(GeneId) %>% 
+  mutate(offset = row_number() * y.position/10) %>% 
+  ungroup() %>% 
+  mutate(y.position = y.position + offset)
+  
+DNA_table %>% 
+  semi_join(BED) %>% 
+  semi_join(test_SLP %>% dplyr::select(GeneId) %>% distinct()) %>% 
+  group_by(GeneId,sample,ID) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  ungroup() %>% 
+  inner_join(metadata2) %>% 
+  mutate_at(vars(SLP_score:Sexo,estadio),as_factor) %>% 
+  drop_na(SLP_score) %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = SLP_score, y = Mutations, fill = SLP_score)) + 
+  geom_errorbarh(data = test_SLP, aes(xmin = xmin, xmax = xmax, y = y.position, height = y.position/10)) +
+  facet_wrap(~ GeneId, scales = "free") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+### Respuesta
+
+```{r}
+DNA_test %>% 
+  mutate(res = list(estimate_contrasts(test,contrast = "Resp"))) %>% 
+  unnest(res) %>% 
+  select(-test,-data) %>% 
+  mutate(padj = p.adjust(p, method = "fdr")) %>% 
+  filter(padj < 0.05) %>% DT::datatable()
+```
+
+```{r fig.width= 15, fig.height= 15}
+test_Resp <- DNA_test %>% 
+  mutate(res = list(estimate_contrasts(test,contrast = "Resp"))) %>% 
+  unnest(res) %>% 
+  select(-test,-data) %>% 
+  mutate(p.adj = p.adjust(p, method = "fdr")) %>% 
+  filter(p.adj < 0.05) %>% 
+  inner_join(DNA_table %>% 
+               ungroup() %>%
+               summarise(Mutations = sum(N), .by = c(GeneId,sample)) %>% 
+               summarise(y.position = max(Mutations),.by = GeneId)) %>% 
+  mutate(Level1_n = case_when( Level1 == "NE" ~ 1,
+                               Level1 == "PE" ~ 2,
+                               Level1 == "RP" ~ 3)) %>% 
+  mutate(Level2_n = case_when( Level2 == "NE" ~ 1,
+                               Level2 == "PE" ~ 2,
+                               Level2 == "RP" ~ 3)) %>% 
+  rowwise() %>% 
+  mutate(xmax = max(Level1_n,Level2_n)) %>% 
+  mutate(xmin = min(Level1_n,Level2_n)) %>% 
+  add_significance() %>% 
+  mutate(group1 = Level1, group2 = Level2) %>% 
+  ungroup() %>% 
+  group_by(GeneId) %>% 
+  mutate(offset = row_number() * y.position/10) %>% 
+  ungroup() %>% 
+  mutate(y.position = y.position + offset)
+  
+DNA_table %>% 
+  semi_join(BED) %>% 
+  semi_join(test_Resp %>% dplyr::select(GeneId) %>% distinct()) %>% 
+  group_by(GeneId,sample,ID) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  ungroup() %>% 
+  inner_join(metadata2) %>% 
+  mutate_at(vars(SLP_score:Sexo,estadio),as_factor) %>% 
+  drop_na(Resp) %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = Resp, y = Mutations, fill = Resp)) + 
+  geom_errorbarh(data = test_Resp, aes(xmin = xmin, xmax = xmax, y = y.position, height = y.position/10)) +
+  facet_wrap(~ GeneId, scales = "free") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+## Integrado
+
+```{r}
+
+RNA <- count_trim %>% 
+  inner_join(ttg, by = c("gene_id" = "ensembl_gene_id")) %>% 
+  group_by(gene_id,Sample) %>% 
+  summarise(Expresion = sum(counts)) %>% 
+  ungroup() %>% 
+  mutate(Sample = if_else(Sample == "22-012-A-01","22-012-A",Sample)) %>% 
+  mutate(Sample = if_else(Sample == "24-017-A","24-017-A1",Sample)) %>% 
+  mutate(Sample = if_else(Sample == "8-019-A","08-019-A",Sample)) %>%
+  mutate(Sample = if_else(Sample == "8-021-A","08-021-A",Sample)) %>% 
+  dplyr::rename(GeneId = gene_id)
+  
+
+DNA <- DNA_table %>% semi_join(BED) %>% 
+  filter(sample != "snpEff_genes.txt") %>% 
+  group_by(GeneId,sample) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  mutate(Sample = str_replace_all(sample,"_","-")) %>% 
+  ungroup() %>% 
+  dplyr::select(-sample)
+
+valid_samples = inner_join(DNA %>% 
+                            dplyr::select(Sample), 
+                          RNA %>% 
+                            dplyr::select(Sample)) %>% 
+  distinct()
+
+DNA_matrix <- DNA %>% 
+  semi_join(valid_samples) %>% 
+  pivot_wider(names_from = GeneId, values_from = Mutations) %>% 
+  as.data.frame()
+RNA_matrix <- RNA %>% 
+  semi_join(valid_samples) %>% 
+  pivot_wider(names_from = GeneId, values_from = Expresion) %>% 
+  as.data.frame()
+
+table_cor_test <- data.frame()
+for (i in 2:ncol(RNA_matrix)){
+  for(j in 2:ncol(DNA_matrix)){
+    table_tmp <- data.frame(Mutations = DNA_matrix[,j], Expresion = RNA_matrix[,i])
+    test = lm(formula = Mutations ~ Expresion, data = table_tmp) %>% broom::glance()
+    test$RNA = colnames(RNA_matrix[i])
+    test$DNA = colnames(DNA_matrix[j])
+    table_cor_test = bind_rows(table_cor_test,test)
+  }
+}
+
+table_cor_test <- table_cor_test %>% mutate(p.adj = p.adjust(p.value, method = "fdr"))
+
+table_cor_test %>% filter(p.adj < 0.05) 
+
+```
