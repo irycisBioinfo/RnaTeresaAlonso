@@ -63,12 +63,22 @@ metadata2 <- metadata %>%
                           Respuesta == "PE" ~ "PE") %>% as_factor()) %>% 
   mutate(Respuesta = as_factor(Respuesta)) %>% 
   mutate(edad = (`Fecha diagnóstico` %>% as_date() %>% year())- so_nacimentodt) %>% 
-  dplyr::select(Paciente,SLP_score,SG_score,motzer = `cmotzer 3 categorías`,heng = `cheng 3 categorías`,Respuesta,Resp,Sexo,edad,estadio = `Estadío tumor al diagnóstico IV`) %>% 
+  dplyr::select(SG,SLP,Paciente,SLP_score,SG_score,motzer = `cmotzer 3 categorías`,heng = `cheng 3 categorías`,Respuesta,Resp,Sexo,edad,estadio = `Estadío tumor al diagnóstico IV`) %>% 
   separate(Paciente,c("Centro","Pat"), sep = "-",remove = F) %>% 
   mutate(Centro = as.numeric(Centro)) %>% 
   mutate(Pat = as.numeric(Pat)) %>% 
   unite(ID,c(Centro,Pat),sep = "-")
   
+metadata2 %>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
+
 ```
 
 ## RNA-Seq
@@ -223,7 +233,15 @@ Heng_favorable_intermedio %>%
   scale_color_d3() +
   theme_light() + labs(title = "Heng_favorable_intermedio")
 
-Heng_favorable_intermedio %>% filter(fdr < 0.05) %>% DT::datatable()
+Heng_favorable_intermedio %>% filter(fdr < 0.05) %>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 
 ```
 
@@ -250,7 +268,15 @@ Heng_favorable_malo %>%
   scale_color_d3() +
   theme_light() + labs(title = "Heng_favorable_malo")
 
-Heng_favorable_malo %>% filter(fdr < 0.05) %>% DT::datatable()
+Heng_favorable_malo %>% filter(fdr < 0.05) %>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 
 ```
 
@@ -277,7 +303,15 @@ Heng_intermedio_malo %>%
   scale_color_d3() +
   theme_light() + labs(title = "Heng_favorable_malo")
 
-Heng_intermedio_malo %>% filter(fdr < 0.05)%>% DT::datatable()
+Heng_intermedio_malo %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 
 ```
 
@@ -335,7 +369,15 @@ SG_bajo_medio %>%
 
 
 
-SG_bajo_medio %>% filter(fdr < 0.05)%>% DT::datatable()
+SG_bajo_medio %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 ```
 
 #### Bajo vs Alto
@@ -364,7 +406,15 @@ SG_bajo_alto %>%
   theme_light() + labs(title = "SG_bajo_alto")
 
 
-SG_bajo_alto %>% filter(fdr < 0.05)%>% DT::datatable()
+SG_bajo_alto %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 ```
 
 #### Medio vs Alto
@@ -393,7 +443,15 @@ SG_medio_alto %>%
   theme_light() + labs(title = "SG_medio_alto")
 
 
-SG_medio_alto %>% filter(fdr < 0.05)%>% DT::datatable()
+SG_medio_alto %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 ```
 
 ### SLP
@@ -423,7 +481,15 @@ SLP_refractario_largo %>%
   scale_color_d3() +
   theme_light() + labs(title = "SLP_refractario_largo")
 
-SLP_refractario_largo %>% filter(fdr < 0.05)%>% DT::datatable()
+SLP_refractario_largo %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 
 ```
 
@@ -452,7 +518,15 @@ SLP_refractario_muyLargo %>%
   scale_color_d3() +
   theme_light() + labs(title = "SLP_refractario_muyLargo")
 
-SLP_refractario_muyLargo %>% filter(fdr < 0.05)%>% DT::datatable()
+SLP_refractario_muyLargo %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 ```
 
 #### Largo vs MuyLargo
@@ -481,7 +555,15 @@ SLP_largo_muyLargo %>%
   theme_light() + labs(title = "SLP_largo_muyLargo")
 
 
-SLP_largo_muyLargo %>% filter(fdr < 0.05)%>% DT::datatable()
+SLP_largo_muyLargo %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 ```
 
 ### Respuesta Parcial vs Progresion de la Enfermedad
@@ -516,6 +598,73 @@ Resp_RP_PE %>% filter(fdr < 0.05)%>% DT::datatable()
 
 ## DNA-Seq
 
+
+```{r}
+metadata2 %>% 
+  mutate(SG = as.numeric(SG)) %>% 
+  mutate(SLP = as.numeric(SLP)) %>% 
+  get_summary_stats() %>% DT::datatable( extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
+
+
+
+DNA_table %>% 
+  group_by(GeneId,sample) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  pivot_wider(names_from = GeneId, values_from = Mutations, values_fill = 0) %>% 
+  pivot_longer(names_to = "GeneId", values_to = "Mutations", -sample) %>% 
+  semi_join(BED) %>% 
+  group_by(GeneId) %>% 
+  get_summary_stats() %>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
+```
+
+
+
+```{r}
+
+DNA_table %>% 
+  group_by(GeneId,sample) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  pivot_wider(names_from = GeneId, values_from = Mutations, values_fill = 0) %>% 
+  DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
+```
+
+
+```{r}
+DNA_table %>% 
+  group_by(sample,GeneId) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  semi_join(BED) %>% 
+  ggplot(aes(x=Mutations)) +
+  geom_histogram(position="fill") + 
+  facet_wrap(~GeneId, scales = "free")
+```
+
+
+
 ```{r}
 library(modelbased)
 DNA_test <- DNA_table %>% 
@@ -538,7 +687,15 @@ DNA_test %>%
   unnest(res) %>% 
   select(-test,-data) %>% 
   mutate(padj = p.adjust(p, method = "fdr")) %>% 
-  filter(padj < 0.05) %>% DT::datatable()
+  filter(padj < 0.05) %>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 ```
 
 ```{r fig.height=15, fig.width= 15}
@@ -589,13 +746,28 @@ DNA_table %>%
 
 ### SG
 
+
+Mediana de SG
+```{r}
+
+```
+
+
 ```{r}
 DNA_test %>% 
   mutate(res = list(estimate_contrasts(test,contrast = "SG_score"))) %>% 
   unnest(res) %>% 
   select(-test,-data) %>% 
   mutate(padj = p.adjust(p, method = "fdr")) %>% 
-  filter(padj < 0.05)%>% DT::datatable()
+  filter(padj < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 ```
 
 ```{r fig.width= 15, fig.height= 15}
@@ -652,7 +824,15 @@ DNA_test %>%
   unnest(res) %>% 
   select(-test,-data) %>% 
   mutate(padj = p.adjust(p, method = "fdr")) %>% 
-  filter(padj < 0.05)%>% DT::datatable()
+  filter(padj < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 ```
 
 ```{r fig.width= 15, fig.height= 15}
@@ -668,10 +848,10 @@ test_SLP <- DNA_test %>%
                summarise(y.position = max(Mutations),.by = GeneId)) %>% 
   mutate(Level1_n = case_when( Level1 == "Refractario" ~ 1,
                                Level1 == "Largo" ~ 2,
-                               Level1 == "Muy Largo" ~ 3)) %>% 
+                               Level1 == "MuyLargo" ~ 3)) %>% 
   mutate(Level2_n = case_when( Level2 == "Refractario" ~ 1,
                                Level2 == "Largo" ~ 2,
-                               Level2 == "Muy Largo" ~ 3)) %>% 
+                               Level2 == "MuyLargo" ~ 3)) %>% 
   rowwise() %>% 
   mutate(xmax = max(Level1_n,Level2_n)) %>% 
   mutate(xmin = min(Level1_n,Level2_n)) %>% 
@@ -708,8 +888,18 @@ DNA_test %>%
   mutate(res = list(estimate_contrasts(test,contrast = "Resp"))) %>% 
   unnest(res) %>% 
   select(-test,-data) %>% 
+  filter(Level1 != "NE") %>% 
+  filter(Level2 != "NE") %>% 
   mutate(padj = p.adjust(p, method = "fdr")) %>% 
-  filter(padj < 0.05) %>% DT::datatable()
+  filter(padj < 0.05) %>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
 ```
 
 ```{r fig.width= 15, fig.height= 15}
@@ -717,18 +907,20 @@ test_Resp <- DNA_test %>%
   mutate(res = list(estimate_contrasts(test,contrast = "Resp"))) %>% 
   unnest(res) %>% 
   select(-test,-data) %>% 
+  filter(Level1 != "NE") %>% 
+  filter(Level2 != "NE") %>% 
   mutate(p.adj = p.adjust(p, method = "fdr")) %>% 
   filter(p.adj < 0.05) %>% 
   inner_join(DNA_table %>% 
                ungroup() %>%
                summarise(Mutations = sum(N), .by = c(GeneId,sample)) %>% 
                summarise(y.position = max(Mutations),.by = GeneId)) %>% 
-  mutate(Level1_n = case_when( Level1 == "NE" ~ 1,
-                               Level1 == "PE" ~ 2,
-                               Level1 == "RP" ~ 3)) %>% 
-  mutate(Level2_n = case_when( Level2 == "NE" ~ 1,
-                               Level2 == "PE" ~ 2,
-                               Level2 == "RP" ~ 3)) %>% 
+  mutate(Level1_n = case_when( Level1 == "NE" ~ 0,
+                               Level1 == "PE" ~ 1,
+                               Level1 == "RP" ~ 2)) %>% 
+  mutate(Level2_n = case_when( Level2 == "NE" ~ 0,
+                               Level2 == "PE" ~ 1,
+                               Level2 == "RP" ~ 2)) %>% 
   rowwise() %>% 
   mutate(xmax = max(Level1_n,Level2_n)) %>% 
   mutate(xmin = min(Level1_n,Level2_n)) %>% 
@@ -749,6 +941,7 @@ DNA_table %>%
   inner_join(metadata2) %>% 
   mutate_at(vars(SLP_score:Sexo,estadio),as_factor) %>% 
   drop_na(Resp) %>% 
+  filter(Resp != "NE") %>% 
   ggplot() + 
   geom_boxplot(aes(x = Resp, y = Mutations, fill = Resp)) + 
   geom_errorbarh(data = test_Resp, aes(xmin = xmin, xmax = xmax, y = y.position, height = y.position/10)) +
@@ -810,6 +1003,8 @@ for (i in 2:ncol(RNA_matrix)){
 
 table_cor_test <- table_cor_test %>% mutate(p.adj = p.adjust(p.value, method = "fdr"))
 
-table_cor_test %>% filter(p.adj < 0.05) 
+table_cor_test %>% filter(p.adj < 0.05) %>% 
+  inner_join(ttg, by = c("RNA" = "ensembl_gene_id")) %>% 
+  dplyr::rename(RNA_gene_name = external_gene_name)
 
 ```
