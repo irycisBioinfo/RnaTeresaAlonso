@@ -653,13 +653,13 @@ DNA_table %>%
 ```
 
 
-```{r}
+```{r fig.width=10, fig.height=10}
 DNA_table %>% 
   group_by(sample,GeneId) %>% 
   summarise(Mutations = sum(N)) %>% 
   semi_join(BED) %>% 
   ggplot(aes(x=Mutations)) +
-  geom_histogram(position="fill") + 
+  geom_histogram() + 
   facet_wrap(~GeneId, scales = "free")
 ```
 
