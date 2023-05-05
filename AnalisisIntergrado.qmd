@@ -3,13 +3,14 @@ title: "Analisis Integrado"
 format: 
   html:
     toc: true
-    toc-depth: 3
+    toc-depth: 4
     page-layout: full
 editor: visual
 execute:
   cache: true
   warning: false
 ---
+
 
 ```{r}
 setwd("/storage2/RNASeq/integrado/")
@@ -54,7 +55,8 @@ metadata2 <- metadata %>%
                               as.numeric(SG)/30 > 6 & as.numeric(SG)/30 <= 26 ~ "Medio",
                               as.numeric(SG)/30 > 26 ~ "Alto") %>% as_factor()) %>% 
   mutate(SLP_score = case_when(as.numeric(SLP)/30 <= 3 ~ "Refractario",
-                              as.numeric(SLP)/30 > 3 & as.numeric(SLP)/30 <= 24 ~ "Largo",
+                               as.numeric(SLP)/30 > 3 & as.numeric(SLP)/30 <= 12 ~ "Respondedor",
+                              as.numeric(SLP)/30 > 12 & as.numeric(SLP)/30 <= 24 ~ "Largo",
                               as.numeric(SLP)/30 > 24 ~ "MuyLargo") %>% as_factor()) %>% 
   dplyr::rename(Respuesta = `Mejor respuesta al tratamiento`) %>% 
   mutate(Resp = case_when(Respuesta == "RP" ~ "RP",
@@ -456,6 +458,45 @@ SG_medio_alto %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons",
 
 ### SLP
 
+
+#### Refractario vs Respondedor
+
+```{r}
+
+SLP_refractario_respondedor <- results(dds_gene_SG_SLP_Resp, contrast = c("SLP_score","Refractario","Respondedor"))
+
+SLP_refractario_respondedor <- SLP_refractario_respondedor %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+SLP_refractario_respondedor %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "SLP_refractario_largo")
+
+SLP_refractario_respondedor %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
+
+```
+
+
 #### Refractario vs Largo
 
 ```{r}
@@ -527,7 +568,82 @@ SLP_refractario_muyLargo %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "B
                            buttons = c('copy', 'csv', 'excel', 'pdf'),
                            pageLength=5, 
                            lengthMenu=c(3,5,10) ))
+
 ```
+#### Respondedor vs Largo
+
+```{r}
+
+SLP_responderdor_Largo <- results(dds_gene_SG_SLP_Resp, contrast = c("SLP_score","Respondedor","Largo"))
+
+SLP_responderdor_Largo <- SLP_responderdor_Largo %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+SLP_responderdor_Largo %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "SLP_responderdor_Largo")
+
+SLP_responderdor_Largo %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
+
+```
+
+#### Respondedor vs MuyLargo
+
+```{r}
+
+SLP_responderdor_MuyLargo <- results(dds_gene_SG_SLP_Resp, contrast = c("SLP_score","Respondedor","MuyLargo"))
+
+SLP_responderdor_MuyLargo <- SLP_responderdor_MuyLargo %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>%
+    dplyr::rename(fdr = padj) %>% 
+  mutate(bonferroni = p.adjust(pvalue, method = "bonferroni")) %>% 
+  mutate(homl = p.adjust(pvalue, method = "holm")) %>% 
+  mutate(BY = p.adjust(pvalue, method = "BY")) %>% 
+  filter(grepl("ENS",ensembl_gene_id)) %>% 
+  mutate(ensembl_gene_id = str_replace(ensembl_gene_id,"\\.\\d+","")) %>% 
+  inner_join(ttg)
+
+SLP_responderdor_MuyLargo %>% 
+  mutate(sig = ifelse(fdr < 0.05,"Significative","No-Significative")) %>%
+  mutate(label = ifelse(sig == "Significative",external_gene_name,NA)) %>% 
+  ggplot(aes(x= log2FoldChange, y = -log10(fdr), color = sig, size = sqrt(baseMean), label = label)) +
+  geom_point(alpha = 0.5) +
+  geom_text_repel(size = 1.5)+
+  scale_color_d3() +
+  theme_light() + labs(title = "SLP_responderdor_MuyLargo")
+
+SLP_responderdor_MuyLargo %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
+
+```
+
 
 #### Largo vs MuyLargo
 
@@ -596,8 +712,152 @@ Resp_RP_PE %>%
 Resp_RP_PE %>% filter(fdr < 0.05)%>% DT::datatable()
 ```
 
-## DNA-Seq
+### Clustering de RNA-Seq
 
+```{r}
+library(vegan)
+library(mclust)
+
+cuentas <- counts(dds_gene_heng, normalized = T)
+
+distancias <- vegdist(cuentas %>% t()) %>% as.matrix()
+
+
+cl <- Mclust(distancias)
+
+
+um <- uwot::umap(distancias)
+
+clustering_metadata <- cl$classification %>% 
+  as_tibble(rownames = "Sample") %>%
+  dplyr::rename(Cluster = value) %>% 
+  mutate(Cluster = as.factor(Cluster)) %>% 
+  mutate(Sample = str_remove(Sample,"X")) %>% 
+  mutate(Sample = str_remove(Sample,regex("_S.*"))) %>% 
+  mutate(Sample = str_replace_all(Sample,regex("\\."),"-")) %>% 
+  separate(Sample,c("Centro","Pat"), sep = "-",remove = F) %>% 
+  mutate(Centro = as.numeric(Centro)) %>% 
+  mutate(Pat = as.numeric(Pat)) %>% 
+  unite(ID,c(Centro,Pat),sep = "-") %>% 
+  inner_join(metadata2) %>% 
+  inner_join(um %>% 
+  as_tibble(rownames ="Sample"))
+```
+
+Test de asociación con la distribución de las muestras segun su perfil de expresión
+```{r}
+adonis2(distancias ~ SLP_score + SG_score + Resp + heng, data = clustering_metadata %>% column_to_rownames("Sample"))
+```
+
+```{r}
+clustering_metadata %>% 
+  ggplot(aes(x = V1, y = V2, color = Cluster)) + 
+  geom_point() + labs(title = "Cluster distribution")
+```
+
+#### Test individuales
+
+```{r}
+clustering_metadata %>% 
+  ggplot(aes(x = V1, y = V2, color = SLP_score)) + 
+  geom_point() + labs(title = "SLP distribution")
+p_slp <- clustering_metadata %>% 
+  freq_table(Cluster,SLP_score) %>% 
+  ggbarstats(SLP_score,Cluster,counts = n)
+p_slp
+extract_stats(p_slp)
+```
+
+
+```{r}
+clustering_metadata %>% 
+  ggplot(aes(x = V1, y = V2, color = SG_score)) + 
+  geom_point() + labs(title = "SG distribution")
+p_sg <- clustering_metadata %>% 
+  freq_table(Cluster,SG_score) %>% 
+  ggbarstats(SG_score,Cluster,counts = n)
+p_sg
+extract_stats(p_sg)
+```
+
+
+```{r}
+clustering_metadata %>% 
+  ggplot(aes(x = V1, y = V2, color = Resp)) + 
+  geom_point() + labs(title = "Respuesta distribution")
+p_Resp <- clustering_metadata %>% 
+  filter(Resp != "NE") %>%  
+  freq_table(Cluster,Resp) %>% 
+  ggbarstats(Resp,Cluster,counts = n)
+p_Resp
+extract_stats(p_Resp)
+```
+
+
+```{r}
+clustering_metadata %>% 
+  ggplot(aes(x = V1, y = V2, color = heng)) + 
+  geom_point() + labs(title = "HENG distribution")
+
+p_heng <- clustering_metadata %>% 
+  freq_table(Cluster,heng) %>% 
+  ggbarstats(heng,Cluster,counts = n)
+p_Resp
+extract_stats(p_heng)
+```
+
+
+```{r}
+clustering_metadata %>% 
+  ggplot(aes(x = V1, y = V2, color = estadio)) + 
+  geom_point() + labs(title = "Estadio distribution")
+
+p_estadio <- clustering_metadata %>% 
+  freq_table(Cluster,estadio) %>% 
+  ggbarstats(estadio,Cluster,counts = n)
+p_estadio
+extract_stats(p_estadio)
+
+```
+
+
+
+
+
+## TMB
+
+```{r}
+library(ggstatsplot)
+
+DNA_TMB_test <- DNA_table %>% 
+  semi_join(BED) %>% 
+  group_by(sample,ID) %>% 
+  summarise(Mutations = sum(N)) %>% 
+  ungroup() %>% 
+  inner_join(metadata2) %>% 
+  mutate_at(vars(SLP_score:Sexo,estadio),as_factor)
+
+```
+### Heng
+
+```{r}
+ggbetweenstats(DNA_TMB_test, x = heng, y = Mutations,type = "robust")
+```
+### SG
+
+```{r}
+  ggbetweenstats(DNA_TMB_test, x =SG_score , y = Mutations,type = "robust")
+```
+
+### SLP
+```{r}
+ggbetweenstats(DNA_TMB_test, x = SLP_score, y = Mutations,type = "robust")
+```
+
+
+
+
+## DNA-Seq
 
 ```{r}
 metadata2 %>% 
@@ -679,6 +939,7 @@ DNA_test <- DNA_table %>%
 
 ```
 
+
 ### Heng
 
 ```{r}
@@ -745,12 +1006,6 @@ DNA_table %>%
 ```
 
 ### SG
-
-
-Mediana de SG
-```{r}
-
-```
 
 
 ```{r}
