@@ -20,6 +20,7 @@ library(ggrepel)
 library(ggsci)
 library(ggpubr)
 library(rstatix)
+library(ggstatsplot)
 ```
 
 # Load data

@@ -10,6 +10,8 @@ forcats
 lubridate
 ggrepel
 ggsci
+ggpubr
+rstatix
 BiocGenerics
 S4Vectors
 IRanges
@@ -20,6 +22,9 @@ MatrixGenerics
 Biobase
 SummarizedExperiment
 DESeq2
+permute
+lattice
+vegan
+mclust
+ggstatsplot
 modelbased
-ggpubr
-rstatix
