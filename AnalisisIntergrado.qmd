@@ -11,7 +11,6 @@ execute:
   warning: false
 ---
 
-
 ```{r}
 setwd("/storage2/RNASeq/integrado/")
 library(tidyverse)
@@ -459,7 +458,6 @@ SG_medio_alto %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "Buttons",
 
 ### SLP
 
-
 #### Refractario vs Respondedor
 
 ```{r}
@@ -496,7 +494,6 @@ SLP_refractario_respondedor %>% filter(fdr < 0.05)%>% DT::datatable(extensions =
                            lengthMenu=c(3,5,10) ))
 
 ```
-
 
 #### Refractario vs Largo
 
@@ -571,6 +568,7 @@ SLP_refractario_muyLargo %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "B
                            lengthMenu=c(3,5,10) ))
 
 ```
+
 #### Respondedor vs Largo
 
 ```{r}
@@ -644,7 +642,6 @@ SLP_responderdor_MuyLargo %>% filter(fdr < 0.05)%>% DT::datatable(extensions = "
                            lengthMenu=c(3,5,10) ))
 
 ```
-
 
 #### Largo vs MuyLargo
 
@@ -746,6 +743,7 @@ clustering_metadata <- cl$classification %>%
 ```
 
 Test de asociación con la distribución de las muestras segun su perfil de expresión
+
 ```{r}
 adonis2(distancias ~ SLP_score + SG_score + Resp + heng, data = clustering_metadata %>% column_to_rownames("Sample"))
 ```
@@ -769,7 +767,6 @@ p_slp
 extract_stats(p_slp)
 ```
 
-
 ```{r}
 clustering_metadata %>% 
   ggplot(aes(x = V1, y = V2, color = SG_score)) + 
@@ -780,7 +777,6 @@ p_sg <- clustering_metadata %>%
 p_sg
 extract_stats(p_sg)
 ```
-
 
 ```{r}
 clustering_metadata %>% 
@@ -794,7 +790,6 @@ p_Resp
 extract_stats(p_Resp)
 ```
 
-
 ```{r}
 clustering_metadata %>% 
   ggplot(aes(x = V1, y = V2, color = heng)) + 
@@ -806,7 +801,6 @@ p_heng <- clustering_metadata %>%
 p_Resp
 extract_stats(p_heng)
 ```
-
 
 ```{r}
 clustering_metadata %>% 
@@ -821,9 +815,63 @@ extract_stats(p_estadio)
 
 ```
 
+#### Analisis Diferencial
+
+```{r}
+table_trim_cluster <- count_trim %>% 
+  inner_join(clustering_metadata %>% dplyr::select(ID,Cluster)) %>% 
+  drop_na() %>% 
+  dplyr::select(gene_id,Sample, counts) %>% 
+  pivot_wider(names_from = Sample, values_from = counts) %>% 
+  as_data_frame() %>% 
+  column_to_rownames("gene_id") %>% 
+  as.matrix() 
 
 
 
+ dds_gene_cluster <- DESeqDataSetFromMatrix(countData = round(table_trim_heng), 
+                                  colData = clustering_metadata %>% column_to_rownames("Sample"), 
+                                 design = ~ Cluster)
+
+ dds_gene_cluster <- DESeq(dds_gene_cluster, test = "LRT", reduced = ~ 1)
+
+```
+
+```{r fig.width= 14, fig.height=14}
+resultsNames(dds_gene_cluster)
+
+
+sig_genes <- lfcShrink(dds_gene_cluster, "Cluster_3_vs_1", format = "DataFrame") %>% 
+  as.data.frame() %>% 
+  rownames_to_column("ensembl_gene_id") %>% 
+  filter(padj < 0.05)
+
+sig_genes %>% inner_join(ttg) %>%  DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
+
+counts(dds_gene_cluster, normalized = T) %>% 
+  as_tibble(rownames = "ensembl_gene_id") %>% 
+  pivot_longer(names_to = "Sample", values_to = "Expression", -ensembl_gene_id) %>% 
+  semi_join(sig_genes) %>% 
+  inner_join(clustering_metadata) %>% 
+  inner_join(ttg) %>% 
+  ggplot(aes(x = Cluster, y = Expression, color = Cluster)) + 
+  geom_boxplot() + 
+  geom_jitter() +
+  facet_wrap(~external_gene_name, scales = "free") +
+  theme_light() +
+  scale_y_log10()
+  
+
+
+```
 
 ## TMB
 
@@ -839,11 +887,13 @@ DNA_TMB_test <- DNA_table %>%
   mutate_at(vars(SLP_score:Sexo,estadio),as_factor)
 
 ```
+
 ### Heng
 
 ```{r}
 ggbetweenstats(DNA_TMB_test, x = heng, y = Mutations,type = "robust")
 ```
+
 ### SG
 
 ```{r}
@@ -851,12 +901,10 @@ ggbetweenstats(DNA_TMB_test, x = heng, y = Mutations,type = "robust")
 ```
 
 ### SLP
+
 ```{r}
 ggbetweenstats(DNA_TMB_test, x = SLP_score, y = Mutations,type = "robust")
 ```
-
-
-
 
 ## DNA-Seq
 
@@ -894,8 +942,6 @@ DNA_table %>%
                            lengthMenu=c(3,5,10) ))
 ```
 
-
-
 ```{r}
 
 DNA_table %>% 
@@ -913,7 +959,6 @@ DNA_table %>%
                            lengthMenu=c(3,5,10) ))
 ```
 
-
 ```{r fig.width=10, fig.height=10}
 DNA_table %>% 
   group_by(sample,GeneId) %>% 
@@ -923,8 +968,6 @@ DNA_table %>%
   geom_histogram() + 
   facet_wrap(~GeneId, scales = "free")
 ```
-
-
 
 ```{r}
 library(modelbased)
@@ -939,7 +982,6 @@ DNA_test <- DNA_table %>%
   mutate(test = list(glm(Mutations ~ SLP_score + SG_score + Resp + heng, data = data, family = poisson)))
 
 ```
-
 
 ### Heng
 
@@ -1007,7 +1049,6 @@ DNA_table %>%
 ```
 
 ### SG
-
 
 ```{r}
 DNA_test %>% 
