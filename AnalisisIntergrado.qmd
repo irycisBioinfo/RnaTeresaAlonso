@@ -342,6 +342,20 @@ dds_gene_SG_SLP_Resp <- DESeqDataSetFromMatrix(countData = round(table_trim_SG_S
                                    design = ~ SG_score + SLP_score + Resp)
 dds_gene_SG_SLP_Resp <- DESeq(dds_gene_SG_SLP_Resp)
 
+
+dds_gene_SLP <- DESeqDataSetFromMatrix(countData = round(table_trim_SG_SLP_Resp), 
+                                   colData = meta_SG_SLP_Resp, 
+                                   design = ~ SLP_score)
+dds_gene_SLP_lrt <- DESeq(dds_gene_SLP, test = "LRT", reduce = ~ 1)
+
+
+
+```
+
+#### LRT (todos juntos)
+
+```{r}
+res_LRT <- results(dds_gene_SLP_lrt) %>% as.data.frame() %>% as_tibble(rownames="gene")
 ```
 
 #### Bajo vs Medio
@@ -874,6 +888,26 @@ counts(dds_gene_cluster, normalized = T) %>%
 ```
 
 ## TMB
+
+### Resumen mutaciones
+
+```{r}
+DNA_table %>% 
+  group_by(GeneId,impact) %>% 
+  summarise(N = sum(N)) %>% 
+  pivot_wider(names_from = impact, values_from = N, values_fill = 0) %>% 
+  ungroup() %>% 
+  mutate(Total = High+Low+Moderate) %>% 
+  DT::datatable(extensions = "Buttons", 
+            options = list(paging = TRUE,
+                           scrollX=TRUE, 
+                           searching = TRUE,
+                           ordering = TRUE,
+                           dom = 'Bfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf'),
+                           pageLength=5, 
+                           lengthMenu=c(3,5,10) ))
+```
 
 ```{r}
 library(ggstatsplot)
